@@ -1,4 +1,50 @@
-## Justificación de las mejoras aplicadas
+## Proyecto elegido
+
+https://github.com/aelassas/microservices
+
+
+
+## Resumen Ejecutivo
+
+* **Vulnerabilidades Iniciales:** 72 en total (69 en el Sistema Operativo base Debian y 3 en dependencias de NuGet).
+* **Vulnerabilidades Corregidas / Mitigadas:** 72 eliminadas (69 removidas del sistema operativo base y 3 solucionadas en los paquetes NuGet del proyecto).
+* **Estado Actual:** **0 Vulnerabilidades detectadas** (Escaneo 100% limpio en todo el contenedor).
+
+
+##  Tabla de Vulnerabilidades Encontradas y Remediadas
+
+| CVE | Severidad | Componente | Riesgo de Explotación | Remediación Aplicada |
+| :--- | :--- | :--- | :--- | :--- |
+| **CVE-2023-45853** | **CRITICAL** | OS Base (`zlib`) | Un archivo ZIP dañado puede romper la memoria del sistema y tomar el control remoto. | Migración a Imagen Base *Alpine* (elimina la librería vulnerable). |
+| **CVE-2026-42496** | **CRITICAL** | OS Base (`perl`) | Un archivo comprimido tramposo puede hackear carpetas prohibidas y alterar datos. | Uso de base ultra ligera sin utilidades ni entornos *Perl*. |
+| **CVE-2026-41992** | **HIGH** | OS Base (`gzip`) | Archivos comprimidos falsos pueden saturar el programa y apagar la app. | Eliminación de herramientas de descompresión heredadas de Debian. |
+| **CVE-2025-69720** | **HIGH** | OS Base (`ncurses`) | Códigos raros enviados a la consola pueden colgar el sistema o dar control externo. | Transición a Alpine (reduce la superficie de comandos expuesta). |
+| **CVE-2026-54369** | **HIGH** | OS Base (`libacl1`) | Un atacante interno puede saltar carpetas usando un error de permisos. | Reemplazo del sistema operativo por una distribución minimalista. |
+| **CVE-2026-44788** | **HIGH** | NuGet (`SharpCompress`) | Ataque *Zip Slip*: guardar archivos maliciosos fuera del sitio permitido al descomprimir. | Actualización del paquete NuGet a su última versión estable segura. |
+| **CVE-2026-44302** | **HIGH** | NuGet (`Snappier`) | Datos maliciosos congelan la app en un bucle eterno, tumbando el servicio. | Actualización de la librería NuGet e implementación de límites de tiempo. |
+| **CVE-2025-9708** | **MEDIUM** | NuGet (`KubernetesClient`)| Conexiones a ciegas sin verificar seguridad, permitiendo espionaje de datos. | Actualización del paquete NuGet y activación de validación obligatoria. |
+
+
+
+## 3. Decisiones de Hardening en el Dockerfile
+
+El archivo de configuración de Docker se transformó utilizando una estrategia optimizada para seguridad activa:
+
+**Adopción de Alpine Linux (`8.0-alpine`):** Se reemplazó la imagen base tradicional de Linux (Debian) por una versión minimalista orientada a la seguridad. Alpine utiliza una librería de sistema reducida (`musl`) y **carece por completo de paquetes innecesarios, compiladores secundarios o utilidades obsoletas (como Perl)**. Esto redujo el reporte de fallos del sistema operativo a cero de forma inmediata.
+
+
+
+## Explicación de cada corrección aplicada al código de la aplicación
+
+Para solucionar los fallos detectados dentro de las librerías de .NET, se modificó el archivo de configuración del proyecto (`CatalogMicroservice.csproj`):
+
+* **Riesgo Mitigado:** Escritura arbitraria de archivos en el disco duro (*Zip Slip*), denegaciones de servicio por congelamiento de CPU y fugas de datos en tránsito por falta de validación en certificados SSL.
+* **Acción Realizada:** Se incrementaron las versiones de las dependencias directas en las referencias del proyecto:
+  ```xml
+  <PackageReference Include="KubernetesClient" Version="17.0.14" />
+  <PackageReference Include="Snappier" Version="1.3.1" />
+  <PackageReference Include="SharpCompress" Version="0.37.2" />
+
 
 - Secretos hardcodeados en appsettings.json: se sustituyeron por placeholders y el servicio ahora requiere JWT_SECRET en el entorno o secreto gestionado; evita exposición de claves en VCS.
 - RequireHttpsMetadata = false en la configuración JWT: se cambió a requerir HTTPS para no aceptar metadatos/token por canales inseguros.
@@ -11,190 +57,52 @@
 
 
 
----
+## Comando exacto usado para construir y escanear ambas imágenes
 
-## Informe de vulnerabilidades 
+* Creacion de la imagen vulnerable original:
+    docker build -t catalog-microservice:vulnerable -f src/microservices/CatalogMicroservice/Dockerfile .
 
-CRITICAL & HIGH
+* Escaneo con trivy imagen orinigal vulnerable:
+    trivy image --format json -o trivy-report-before.txt catalog-microservice:vulnerable
 
-1) CVE-2023-45853
+* Creacion de la imagen Hardened:
+    docker build -t catalog-microservice:hardened -f src/microservices/CatalogMicroservice/Dockerfile.hardened .
 
-Paquete afectado y versión: zlib 1:1.2.13.dfsg-1 (Debian)
+* Escaneo con trivy imagen Hardened:
+    trivy image --format json -o trivy-report-after.txt catalog-microservice:hardened
 
-Severidad: CRITICAL
 
-Componente: OS base
 
-Vector de explotación: Un archivo ZIP dañado puede congelar el sistema o permitir que un atacante tome el control total desde afuera.
+## Captura o output de Trivy mostrando **0 vulnerabilidades**
 
-Estrategia de remediación: Actualizar el sistema operativo base del contenedor a una versión moderna y segura.
 
-2) CVE-2026-42496
+![0 vulnerabilidades](image.png)
 
-Paquete afectado y versión: perl-base / perl-Archive-Tar
+Report Summary
 
-Severidad: CRITICAL
+┌──────────────────────────────────────────────────────────────────────────────────┬─────────────┬─────────────────┬─────────┐
+│                                      Target                                      │    Type     │ Vulnerabilities │ Secrets │
+├──────────────────────────────────────────────────────────────────────────────────┼─────────────┼─────────────────┼─────────┤
+│ catalog-microservice:hardened (alpine 3.23.5)                                    │   alpine    │        0        │    -    │
+├──────────────────────────────────────────────────────────────────────────────────┼─────────────┼─────────────────┼─────────┤
+│ app/CatalogMicroservice.deps.json                                                │ dotnet-core │        0        │    -    │
+├──────────────────────────────────────────────────────────────────────────────────┼─────────────┼─────────────────┼─────────┤
+│ usr/share/dotnet/shared/Microsoft.AspNetCore.App/8.0.28/Microsoft.AspNetCore.Ap- │ dotnet-core │        0        │    -    │
+│ p.deps.json                                                                      │             │                 │         │
+├──────────────────────────────────────────────────────────────────────────────────┼─────────────┼─────────────────┼─────────┤
+│ usr/share/dotnet/shared/Microsoft.NETCore.App/8.0.28/Microsoft.NETCore.App.deps- │ dotnet-core │        0        │    -    │
+│ .json                                                                            │             │                 │         │
+└──────────────────────────────────────────────────────────────────────────────────┴─────────────┴─────────────────┴─────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
 
-Componente: OS base
 
-Vector de explotación: Al abrir un archivo comprimido tramposo, este puede hackear carpetas prohibidas y alterar o borrar información del sistema.
 
-Estrategia de remediación: Actualizar la versión de Linux de la base o eliminar herramientas que no se usen (como Perl).
+## Lecciones Aprendidas y Recomendaciones para CI/CD
 
-3) CVE-2026-41992
+* Evitar Tags de Imágenes Genéricos: Usar FROM dotnet/aspnet:8.0 arrastra componentes masivos y desactualizados del sistema operativo. Es vital acotar el entorno usando variantes declarativas y ligeras como -alpine.
 
-Paquete afectado y versión: gzip 1.12-1 (Debian)
+* Automatizar Escaneos en el Pipeline: Integrar Trivy como un paso obligatorio inmediatamente después de la compilación de la imagen en tu pipeline de CI/CD (GitHub Actions, GitLab CI o Azure Pipelines).
 
-Severidad: HIGH
-
-Componente: OS base
-
-Vector de explotación: Un archivo comprimido falso puede saturar el programa y apagar la aplicación por completo.
-
-Estrategia de remediación: Actualizar el sistema base y no aceptar archivos de páginas o usuarios desconocidos.
-
-4) CVE-2025-69720
-
-Paquete afectado y versión: libtinfo6 / ncurses
-
-Severidad: HIGH
-
-Componente: OS base
-
-Vector de explotación: Enviar textos o códigos raros a la pantalla de comandos del sistema puede tumbarlo o dejar que un extraño lo maneje.
-
-Estrategia de remediación: Actualizar la imagen base y configurar el contenedor para que no use pantallas de comandos innecesarias.
-
-5) CVE-2026-54369
-
-Paquete afectado y versión: libacl1
-
-Severidad: HIGH
-
-Componente: OS base
-
-Vector de explotación: Si alguien ya logró entrar, puede usar un error de permisos para meterse en carpetas secretas y robar más accesos.
-
-Estrategia de remediación: Actualizar la base y asegurarse de que la aplicación no corra con permisos de "Administrador" (root).
-
-6) CVE-2026-44788
-
-Paquete afectado y versión: SharpCompress (dependencia NuGet)
-
-Severidad: HIGH
-
-Componente: Dependencia del proyecto
-
-Vector de explotación: Al desempaquetar un ZIP con la aplicación, este puede guardar archivos dañinos fuera del sitio permitido y romper la app.
-
-Estrategia de remediación: Actualizar la librería interna (SharpCompress) desde el código a su última versión segura.
-
-7) CVE-2026-44302
-
-Paquete afectado y versión: Snappier (dependencia NuGet)
-
-Severidad: HIGH
-
-Componente: Dependencia del proyecto
-
-Vector de explotación: Datos maliciosos pueden trabar la aplicación en un bucle eterno, gastando toda la memoria hasta colapsar el servicio.
-
-Estrategia de remediación: Actualizar la librería a la versión fija y poner límites de tiempo para procesar archivos.
-
-8) CVE-2025-9708
-
-Paquete afectado y versión: KubernetesClient (NuGet)
-
-Severidad: MEDIUM
-
-Componente: Dependencia del proyecto
-
-Vector de explotación: La aplicación confía a ciegas en conexiones externas sin revisar su seguridad, abriendo la puerta a que espíen los datos.
-
-Estrategia de remediación: Actualizar el paquete en el proyecto y activar la verificación obligatoria de conexiones seguras.
-
-9) CVE-2026-42497
-
-Paquete afectado y versión: perl-Archive-Tar
-
-Severidad: HIGH
-
-Componente: OS base
-
-Vector de explotación: Archivos comprimidos dañados pueden desconfigurar o borrar partes esenciales del sistema operativo interno.
-
-Estrategia de remediación: Actualizar el sistema base y borrar los paquetes de Perl si la aplicación no los necesita para funcionar.
-
-10) CVE-2026-54371
-
-Paquete afectado y versión: libattr1
-
-Severidad: HIGH
-
-Componente: OS base
-
-Vector de explotación: Un fallo al revisar las etiquetas de los archivos permite engañar al sistema para entrar a zonas prohibidas.
-
-Estrategia de remediación: Actualizar la imagen base y limitar los privilegios generales del contenedor.
-
-MEDIUM
-
-11) CVE-2026-13595
-
-Paquete afectado y versión: util-linux
-
-Severidad: MEDIUM
-
-Componente: OS base
-
-Vector de explotación: Errores en las herramientas internas de Linux pueden hacer que un atacante manipule el disco duro virtual y falle el sistema.
-
-Estrategia de remediación: Actualizar el sistema operativo base de la imagen a través del proceso automático de publicación.
-
-12) CVE-2026-27171
-
-Paquete afectado y versión: zlib
-
-Severidad: MEDIUM
-
-Componente: OS base
-
-Vector de explotación: Archivos comprimidos alterados pueden agotar la potencia del procesador de golpe, haciendo que la app deje de responder.
-
-Estrategia de remediación: Actualizar la base y limitar en código el tamaño máximo de los archivos que se pueden subir.
-
-13) CVE-2026-5450
-
-Paquete afectado y versión: glibc (libc6)
-
-Severidad: MEDIUM
-
-Componente: OS base
-
-Vector de explotación: El envío de datos con formatos extraños confunde al motor del sistema, cerrando la aplicación de manera inesperada.
-
-Estrategia de remediación: Actualizar la versión base de Linux y correr los procesos con accesos mínimos.
-
-14) CVE-2025-30258
-
-Paquete afectado y versión: gpgv / gnupg
-
-Severidad: MEDIUM
-
-Componente: OS base
-
-Vector de explotación: Al validar firmas digitales de seguridad falsas, el sistema puede ignorar la protección o colgarse por completo.
-
-Estrategia de remediación: Actualizar la base y evitar que la aplicación verifique de forma automática archivos en los que no confía.
-
-15) CVE-2025-15649
-
-Paquete afectado y versión: perl-IO-Compress
-
-Severidad: MEDIUM
-
-Componente: OS base
-
-Vector de explotación: El procesamiento de archivos dañados provoca fallas que congelan las herramientas del sistema operativo.
-
-Estrategia de remediación: Quitar los componentes de Perl de la imagen si no hacen falta, o actualizar la base del contenedor.
+* Política de Rebuild Periódico: Las vulnerabilidades en sistemas operativos son descubiertas a diario. Se recomienda programar tareas de compilación semanales (cron-jobs) para asegurar que las imágenes en producción absorban automáticamente los últimos parches de seguridad liberados por el proveedor de la imagen base.
