@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-jammy-chiseled AS base
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS base
 WORKDIR /app
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
@@ -11,7 +11,7 @@ RUN dotnet restore "microservices/CatalogMicroservice/CatalogMicroservice.csproj
 
 WORKDIR "/src/microservices/CatalogMicroservice"
 COPY src/microservices/CatalogMicroservice .
-RUN dotnet build "CatalogMicroservice.csproj" -c Release -o /app/build [cite: 533]
+RUN dotnet build "CatalogMicroservice.csproj" -c Release -o /app/build
 
 FROM build AS publish
 RUN dotnet publish "CatalogMicroservice.csproj" -c Release -o /app/publish
@@ -23,4 +23,4 @@ ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "CatalogMicroservice.dll"] [cite: 534]
+ENTRYPOINT ["dotnet", "CatalogMicroservice.dll"]
