@@ -23,7 +23,18 @@ public class CatalogController(ICatalogRepository catalogRepository) : Controlle
     [Authorize]
     public IActionResult Get(string id)
     {
+        // Validate the id is a valid ObjectId
+        if (!MongoDB.Bson.ObjectId.TryParse(id, out _))
+        {
+            return BadRequest("Invalid id format.");
+        }
+
         var catalogItem = catalogRepository.GetCatalogItem(id);
+        if (catalogItem == null)
+        {
+            return NotFound();
+        }
+
         return Ok(catalogItem);
     }
 
@@ -32,6 +43,24 @@ public class CatalogController(ICatalogRepository catalogRepository) : Controlle
     [Authorize]
     public IActionResult Post([FromBody] CatalogItem catalogItem)
     {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        // Additional basic validations
+        if (string.IsNullOrWhiteSpace(catalogItem.Name) || (catalogItem.Name?.Length ?? 0) > 200)
+        {
+            ModelState.AddModelError(nameof(catalogItem.Name), "Name is required and must not exceed 200 characters.");
+            return BadRequest(ModelState);
+        }
+
+        if (catalogItem.Price < 0)
+        {
+            ModelState.AddModelError(nameof(catalogItem.Price), "Price must be a non-negative value.");
+            return BadRequest(ModelState);
+        }
+
         catalogRepository.InsertCatalogItem(catalogItem);
         return CreatedAtAction(nameof(Get), new { id = catalogItem.Id }, catalogItem);
     }

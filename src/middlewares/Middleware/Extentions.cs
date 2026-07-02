@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using System;
 using MongoDB.Driver;
 using System.Text;
 
@@ -34,17 +35,34 @@ public static class Extentions
         var options = new JwtOptions();
         var section = configuration.GetSection("jwt");
         section.Bind(options);
-        services.Configure<JwtOptions>(section);
+
+        // Prefer environment variable for secret, fallback to configured secret
+        var envSecret = Environment.GetEnvironmentVariable("JWT_SECRET");
+        var secret = !string.IsNullOrWhiteSpace(envSecret) ? envSecret : options?.Secret;
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            throw new InvalidOperationException("JWT secret is not configured. Set JWT_SECRET environment variable or configure jwt:secret in configuration.");
+        }
+
+        // Ensure configured options reflect resolved secret
+        services.Configure<JwtOptions>(opts =>
+        {
+            opts.Secret = secret;
+            opts.ExpiryMinutes = options?.ExpiryMinutes ?? 60;
+        });
+
         services.AddSingleton<IJwtBuilder, JwtBuilder>();
         services.AddAuthentication()
             .AddJwtBearer(x =>
             {
-                x.RequireHttpsMetadata = false;
+                // Require HTTPS metadata to avoid accepting tokens over insecure channels
+                x.RequireHttpsMetadata = true;
                 x.SaveToken = true;
                 x.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateAudience = false,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Secret))
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret))
                 };
             });
     }
@@ -53,9 +71,23 @@ public static class Extentions
     {
         var section = configuration.GetSection("jwt");
         var options = section.Get<JwtOptions>();
-        var key = Encoding.UTF8.GetBytes(options.Secret);
         section.Bind(options);
-        services.Configure<JwtOptions>(section);
+
+        // Prefer environment variable for secret, fallback to configured secret
+        var envSecret = Environment.GetEnvironmentVariable("JWT_SECRET");
+        var secret = !string.IsNullOrWhiteSpace(envSecret) ? envSecret : options?.Secret;
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            throw new InvalidOperationException("JWT secret is not configured. Set JWT_SECRET environment variable or configure jwt:secret in configuration.");
+        }
+
+        services.Configure<JwtOptions>(opts =>
+        {
+            opts.Secret = secret;
+            opts.ExpiryMinutes = options?.ExpiryMinutes ?? 60;
+        });
+
+        var key = Encoding.UTF8.GetBytes(secret);
 
         services.AddSingleton<IJwtBuilder, JwtBuilder>();
         services.AddTransient<JwtMiddleware>();
@@ -67,14 +99,17 @@ public static class Extentions
             })
             .AddJwtBearer(x =>
             {
-                x.RequireHttpsMetadata = false;
+                // Require HTTPS to avoid token exposure over insecure channels
+                x.RequireHttpsMetadata = true;
                 x.SaveToken = true;
                 x.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = new SymmetricSecurityKey(key),
+                    // Encourage validation of issuer/audience in production by configuration
                     ValidateIssuer = false,
-                    ValidateAudience = false
+                    ValidateAudience = false,
+                    RequireExpirationTime = true
                 };
             });
 

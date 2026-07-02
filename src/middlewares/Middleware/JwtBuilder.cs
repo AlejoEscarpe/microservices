@@ -67,11 +67,13 @@ public class JwtBuilder(IOptions<JwtOptions> options) : IJwtBuilder
             var parameters = new TokenValidationParameters()
             {
                 RequireExpirationTime = true,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(key),
                 ValidateIssuer = false,
-                ValidateAudience = false,
-                IssuerSigningKey = new SymmetricSecurityKey(key)
+                ValidateAudience = false
             };
-            IdentityModelEventSource.ShowPII = true;
+            // Do not enable PII in logs by default
+            IdentityModelEventSource.ShowPII = false;
             ClaimsPrincipal principal = tokenHandler.ValidateToken(token, parameters, out _);
             return principal;
         }

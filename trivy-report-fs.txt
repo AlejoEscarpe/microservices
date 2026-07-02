@@ -1,0 +1,56 @@
+
+Report Summary
+
+┌────────────────────────────────────────────────┬─────────────┬─────────────────┬─────────┬───────────────────┐
+│                     Target                     │    Type     │ Vulnerabilities │ Secrets │ Misconfigurations │
+├────────────────────────────────────────────────┼─────────────┼─────────────────┼─────────┼───────────────────┤
+│ bin/Debug/net8.0/CatalogMicroservice.deps.json │ dotnet-core │        3        │    -    │         -         │
+├────────────────────────────────────────────────┼─────────────┼─────────────────┼─────────┼───────────────────┤
+│ Dockerfile                                     │ dockerfile  │        -        │    -    │         2         │
+└────────────────────────────────────────────────┴─────────────┴─────────────────┴─────────┴───────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+
+bin/Debug/net8.0/CatalogMicroservice.deps.json (dotnet-core)
+============================================================
+Total: 3 (UNKNOWN: 0, LOW: 0, MEDIUM: 2, HIGH: 1, CRITICAL: 0)
+
+┌──────────────────┬────────────────┬──────────┬──────────┬───────────────────┬───────────────┬─────────────────────────────────────────────────────────────┐
+│     Library      │ Vulnerability  │ Severity │  Status  │ Installed Version │ Fixed Version │                            Title                            │
+├──────────────────┼────────────────┼──────────┼──────────┼───────────────────┼───────────────┼─────────────────────────────────────────────────────────────┤
+│ KubernetesClient │ CVE-2025-9708  │ MEDIUM   │ fixed    │ 12.1.1            │ 17.0.14       │ Kubernetes C# client accepts certificates from any CA       │
+│                  │                │          │          │                   │               │ without properly verifying the...                           │
+│                  │                │          │          │                   │               │ https://avd.aquasec.com/nvd/cve-2025-9708                   │
+├──────────────────┼────────────────┤          ├──────────┼───────────────────┼───────────────┼─────────────────────────────────────────────────────────────┤
+│ SharpCompress    │ CVE-2026-44788 │          │ affected │ 0.30.1            │               │ SharpCompress has directory traversal via directory entries │
+│                  │                │          │          │                   │               │ in WriteToDirectory (zip slip variant)...                   │
+│                  │                │          │          │                   │               │ https://avd.aquasec.com/nvd/cve-2026-44788                  │
+├──────────────────┼────────────────┼──────────┼──────────┼───────────────────┼───────────────┼─────────────────────────────────────────────────────────────┤
+│ Snappier         │ CVE-2026-44302 │ HIGH     │ fixed    │ 1.0.0             │ 1.3.1         │ Snappier has an infinite loop during SnappyStream           │
+│                  │                │          │          │                   │               │ decompression with malformed framed input...                │
+│                  │                │          │          │                   │               │ https://avd.aquasec.com/nvd/cve-2026-44302                  │
+└──────────────────┴────────────────┴──────────┴──────────┴───────────────────┴───────────────┴─────────────────────────────────────────────────────────────┘
+
+Dockerfile (dockerfile)
+=======================
+Tests: 27 (SUCCESSES: 25, FAILURES: 2)
+Failures: 2 (UNKNOWN: 0, LOW: 1, MEDIUM: 0, HIGH: 1, CRITICAL: 0)
+
+DS-0002 (HIGH): Specify at least 1 USER command in Dockerfile with non-root user as argument
+════════════════════════════════════════
+Running containers with 'root' user can lead to a container escape situation. It is a best practice to run containers as non-root users, which can be done by adding a 'USER' statement to the Dockerfile.
+
+See https://avd.aquasec.com/misconfig/ds-0002
+────────────────────────────────────────
+
+
+DS-0026 (LOW): Add HEALTHCHECK instruction in your Dockerfile
+════════════════════════════════════════
+You should add HEALTHCHECK instruction in your docker container images to perform the health check on running containers.
+
+See https://avd.aquasec.com/misconfig/ds-0026
+────────────────────────────────────────
+
+

@@ -24,7 +24,41 @@ public class Startup(IConfiguration configuration)
     {
         services.AddControllers();
 
-        services.AddJwtAuthentication(Configuration); // JWT Configuration
+        // JWT Configuration (configured locally for this microservice to avoid modifying shared middleware)
+        var jwtSection = Configuration.GetSection("jwt");
+        var jwtOptions = jwtSection.Get<Middleware.JwtOptions>() ?? new Middleware.JwtOptions();
+        var envSecret = Environment.GetEnvironmentVariable("JWT_SECRET");
+        var secret = !string.IsNullOrWhiteSpace(envSecret) ? envSecret : jwtOptions.Secret;
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            throw new Exception("JWT secret is not configured. Set JWT_SECRET environment variable or configure jwt:secret in configuration.");
+        }
+
+        jwtSection.Bind(jwtOptions);
+        jwtOptions.Secret = secret;
+        services.Configure<Middleware.JwtOptions>(jwtSection);
+
+        var key = System.Text.Encoding.UTF8.GetBytes(secret);
+        services.AddSingleton<Middleware.IJwtBuilder, Middleware.JwtBuilder>();
+        services.AddTransient<Middleware.JwtMiddleware>();
+        services.AddAuthentication(options =>
+        {
+            options.DefaultAuthenticateScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+            options.DefaultChallengeScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+        })
+        .AddJwtBearer(x =>
+        {
+            x.RequireHttpsMetadata = true; // enforce HTTPS for token metadata
+            x.SaveToken = true;
+            x.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(key),
+                ValidateIssuer = false,
+                ValidateAudience = false,
+                RequireExpirationTime = true
+            };
+        });
 
         services.AddMongoDb(Configuration);
 
@@ -78,14 +112,13 @@ public class Startup(IConfiguration configuration)
         if (env.IsDevelopment())
         {
             app.UseDeveloperExceptionPage();
+
+            app.UseSwagger();
+            app.UseSwaggerUI(c =>
+            {
+                c.SwaggerEndpoint("/swagger/v1/swagger.json", "Catalog V1");
+            });
         }
-
-        app.UseSwagger();
-
-        app.UseSwaggerUI(c =>
-        {
-            c.SwaggerEndpoint("/swagger/v1/swagger.json", "Catalog V1");
-        });
 
         var option = new RewriteOptions();
         option.AddRedirect("^$", "swagger");
@@ -101,12 +134,12 @@ public class Startup(IConfiguration configuration)
 
         app.UseHttpsRedirection();
 
+
         app.UseRouting();
 
-        app.UseMiddleware<JwtMiddleware>(); // JWT Middleware
-
+        // Ensure built-in authentication runs before the custom middleware
         app.UseAuthentication();
-
+        app.UseMiddleware<JwtMiddleware>(); // JWT Middleware - runs after authentication to populate context items
         app.UseAuthorization();
 
         app.UseEndpoints(endpoints =>
